@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -251,12 +252,14 @@ func RequestHandler(w http.ResponseWriter, r *http.Request) bool {
 		}
 		// Run force merge in background
 		partitionNamePrefix := r.FormValue("partition_prefix")
+		intervalStr := r.FormValue("interval")
+		interval, _ := strconv.ParseInt(intervalStr, 10, 64)
 		go func() {
 			activeForceMerges.Inc()
 			defer activeForceMerges.Dec()
 			logger.Infof("forced merge for partition_prefix=%q has been started", partitionNamePrefix)
 			startTime := time.Now()
-			if err := Storage.ForceMergePartitions(partitionNamePrefix); err != nil {
+			if err := Storage.ForceMergePartitions(partitionNamePrefix, interval); err != nil {
 				logger.Errorf("error in forced merge for partition_prefix=%q: %s", partitionNamePrefix, err)
 			}
 			logger.Infof("forced merge for partition_prefix=%q has been successfully finished in %.3f seconds", partitionNamePrefix, time.Since(startTime).Seconds())

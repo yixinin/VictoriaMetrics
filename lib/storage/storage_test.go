@@ -1047,7 +1047,7 @@ func testStorageAddRows(rng *rand.Rand, s *Storage) error {
 	// Verify that force merge for the snapshot leaves at most a single part per partition.
 	// Zero parts are possible if the snapshot is created just after the partition has been created
 	// by concurrent goroutine, but it didn't put the data into it yet.
-	if err := s1.ForceMergePartitions(""); err != nil {
+	if err := s1.ForceMergePartitions("", 0); err != nil {
 		return fmt.Errorf("error when force merging partitions: %w", err)
 	}
 	ptws := s1.tb.GetPartitions(nil)

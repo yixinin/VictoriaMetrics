@@ -1523,8 +1523,8 @@ func (mr *MetricRow) UnmarshalX(src []byte) ([]byte, error) {
 // ForceMergePartitions force-merges partitions in s with names starting from the given partitionNamePrefix.
 //
 // Partitions are merged sequentially in order to reduce load on the system.
-func (s *Storage) ForceMergePartitions(partitionNamePrefix string) error {
-	return s.tb.ForceMergePartitions(partitionNamePrefix)
+func (s *Storage) ForceMergePartitions(partitionNamePrefix string, duInterval int64) error {
+	return s.tb.ForceMergePartitions(partitionNamePrefix, duInterval)
 }
 
 var rowsAddedTotal uint64
