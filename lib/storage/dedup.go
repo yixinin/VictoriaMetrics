@@ -20,7 +20,14 @@ func GetDedupInterval() int64 {
 
 var globalDedupInterval int64
 
-func isDedupEnabled() bool {
+func isDedupEnabled(interval ...int64) bool {
+	if len(interval) > 0 {
+		for _, v := range interval {
+			if v > 0 {
+				return true
+			}
+		}
+	}
 	return globalDedupInterval > 0
 }
 

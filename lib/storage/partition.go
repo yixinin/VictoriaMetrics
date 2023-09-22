@@ -1253,7 +1253,7 @@ func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFi
 	mergeIdx := pt.nextMergeIdx()
 	dstPartPath := pt.getDstPartPath(dstPartType, mergeIdx)
 
-	if !isDedupEnabled() && isFinal && len(pws) == 1 && pws[0].mp != nil {
+	if !isDedupEnabled(duInterval) && isFinal && len(pws) == 1 && pws[0].mp != nil {
 		// Fast path: flush a single in-memory part to disk.
 		mp := pws[0].mp
 		mp.MustStoreToDisk(dstPartPath)
