@@ -159,6 +159,8 @@ type partition struct {
 
 	stopCh chan struct{}
 
+	dedupInterval int64
+
 	wg sync.WaitGroup
 }
 
@@ -874,7 +876,7 @@ func (pt *partition) flushInmemoryParts(isFinal bool) {
 	}
 	pt.partsLock.Unlock()
 
-	if err := pt.mergePartsOptimal(pws, nil, 0); err != nil {
+	if err := pt.mergePartsOptimal(pws, nil); err != nil {
 		logger.Panicf("FATAL: cannot merge in-memory parts: %s", err)
 	}
 }
@@ -907,7 +909,7 @@ func (rrs *rawRowsShard) appendRawRowsToFlush(dst []rawRow, isFinal bool) []rawR
 	return dst
 }
 
-func (pt *partition) mergePartsOptimal(pws []*partWrapper, stopCh <-chan struct{}, duInterval int64) error {
+func (pt *partition) mergePartsOptimal(pws []*partWrapper, stopCh <-chan struct{}) error {
 	sortPartsForOptimalMerge(pws)
 	for len(pws) > 0 {
 		n := defaultPartsToMerge
@@ -916,7 +918,7 @@ func (pt *partition) mergePartsOptimal(pws []*partWrapper, stopCh <-chan struct{
 		}
 		pwsChunk := pws[:n]
 		pws = pws[n:]
-		err := pt.mergeParts(pwsChunk, stopCh, true, duInterval)
+		err := pt.mergeParts(pwsChunk, stopCh, true)
 		if err == nil {
 			continue
 		}
@@ -930,7 +932,7 @@ func (pt *partition) mergePartsOptimal(pws []*partWrapper, stopCh <-chan struct{
 }
 
 // ForceMergeAllParts runs merge for all the parts in pt.
-func (pt *partition) ForceMergeAllParts(duInterval int64) error {
+func (pt *partition) ForceMergeAllParts() error {
 	pws := pt.getAllPartsForMerge()
 	if len(pws) == 0 {
 		// Nothing to merge.
@@ -950,7 +952,7 @@ func (pt *partition) ForceMergeAllParts(duInterval int64) error {
 	// If len(pws) == 1, then the merge must run anyway.
 	// This allows applying the configured retention, removing the deleted series
 	// and performing de-duplication if needed.
-	if err := pt.mergePartsOptimal(pws, pt.stopCh, duInterval); err != nil {
+	if err := pt.mergePartsOptimal(pws, pt.stopCh); err != nil {
 		return fmt.Errorf("cannot force merge %d parts from partition %q: %w", len(pws), pt.name, err)
 	}
 
@@ -1150,7 +1152,7 @@ func (pt *partition) mergeInmemoryParts() error {
 	pt.partsLock.Unlock()
 
 	atomicSetBool(&pt.mergeNeedFreeDiskSpace, needFreeSpace)
-	return pt.mergeParts(pws, pt.stopCh, false, 0)
+	return pt.mergeParts(pws, pt.stopCh, false)
 }
 
 func (pt *partition) mergeExistingParts(isFinal bool) error {
@@ -1170,7 +1172,7 @@ func (pt *partition) mergeExistingParts(isFinal bool) error {
 	pt.partsLock.Unlock()
 
 	atomicSetBool(&pt.mergeNeedFreeDiskSpace, needFreeSpace)
-	return pt.mergeParts(pws, pt.stopCh, isFinal, 0)
+	return pt.mergeParts(pws, pt.stopCh, isFinal)
 }
 
 func (pt *partition) releasePartsToMerge(pws []*partWrapper) {
@@ -1199,7 +1201,7 @@ func (pt *partition) runFinalDedup() error {
 	t := time.Now()
 	logger.Infof("starting final dedup for partition %s using requiredDedupInterval=%d ms, since the partition has smaller actualDedupInterval=%d ms",
 		pt.bigPartsPath, requiredDedupInterval, actualDedupInterval)
-	if err := pt.ForceMergeAllParts(0); err != nil {
+	if err := pt.ForceMergeAllParts(); err != nil {
 		return fmt.Errorf("cannot perform final dedup for partition %s: %w", pt.bigPartsPath, err)
 	}
 	logger.Infof("final dedup for partition %s has been finished in %.3f seconds", pt.bigPartsPath, time.Since(t).Seconds())
@@ -1215,6 +1217,9 @@ func (pt *partition) getRequiredDedupInterval() (int64, int64) {
 	pws := pt.GetParts(nil, false)
 	defer pt.PutParts(pws)
 	dedupInterval := GetDedupInterval()
+	if pt.dedupInterval > 0 {
+		dedupInterval = pt.dedupInterval
+	}
 	minDedupInterval := getMinDedupInterval(pws)
 	return dedupInterval, minDedupInterval
 }
@@ -1240,7 +1245,7 @@ func getMinDedupInterval(pws []*partWrapper) int64 {
 // if isFinal is set, then the resulting part will be saved to disk.
 //
 // All the parts inside pws must have isInMerge field set to true.
-func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFinal bool, duInterval int64) error {
+func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFinal bool) error {
 	if len(pws) == 0 {
 		// Nothing to merge.
 		return errNothingToMerge
@@ -1253,7 +1258,7 @@ func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFi
 	mergeIdx := pt.nextMergeIdx()
 	dstPartPath := pt.getDstPartPath(dstPartType, mergeIdx)
 
-	if !isDedupEnabled(duInterval) && isFinal && len(pws) == 1 && pws[0].mp != nil {
+	if !isDedupEnabled(pt.dedupInterval) && isFinal && len(pws) == 1 && pws[0].mp != nil {
 		// Fast path: flush a single in-memory part to disk.
 		mp := pws[0].mp
 		mp.MustStoreToDisk(dstPartPath)
@@ -1277,6 +1282,7 @@ func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFi
 	rowsPerBlock := float64(srcRowsCount) / float64(srcBlocksCount)
 	compressLevel := getCompressLevel(rowsPerBlock)
 	bsw := getBlockStreamWriter()
+	bsw.dedupInterval = pt.dedupInterval
 	var mpNew *inmemoryPart
 	if dstPartType == partInmemory {
 		mpNew = getInmemoryPart()
@@ -1290,7 +1296,7 @@ func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFi
 	}
 
 	// Merge source parts to destination part.
-	ph, err := pt.mergePartsInternal(dstPartPath, bsw, bsrs, dstPartType, stopCh, duInterval)
+	ph, err := pt.mergePartsInternal(dstPartPath, bsw, bsrs, dstPartType, stopCh)
 	putBlockStreamWriter(bsw)
 	for _, bsr := range bsrs {
 		putBlockStreamReader(bsr)
@@ -1403,7 +1409,7 @@ func mustOpenBlockStreamReaders(pws []*partWrapper) []*blockStreamReader {
 	return bsrs
 }
 
-func (pt *partition) mergePartsInternal(dstPartPath string, bsw *blockStreamWriter, bsrs []*blockStreamReader, dstPartType partType, stopCh <-chan struct{}, duInterval int64) (*partHeader, error) {
+func (pt *partition) mergePartsInternal(dstPartPath string, bsw *blockStreamWriter, bsrs []*blockStreamReader, dstPartType partType, stopCh <-chan struct{}) (*partHeader, error) {
 	var ph partHeader
 	var rowsMerged *uint64
 	var rowsDeleted *uint64
@@ -1437,11 +1443,7 @@ func (pt *partition) mergePartsInternal(dstPartPath string, bsw *blockStreamWrit
 		return nil, fmt.Errorf("cannot merge %d parts to %s: %w", len(bsrs), dstPartPath, err)
 	}
 	if dstPartPath != "" {
-		if duInterval <= 0 {
-			ph.MinDedupInterval = duInterval
-		} else {
-			ph.MinDedupInterval = GetDedupInterval()
-		}
+		ph.MinDedupInterval = GetDedupInterval()
 		ph.MustWriteMetadata(dstPartPath)
 	}
 	return &ph, nil

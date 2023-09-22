@@ -42,9 +42,18 @@ func mergeBlockStreamsInternal(ph *partHeader, bsw *blockStreamWriter, bsm *bloc
 	dmis := s.getDeletedMetricIDs()
 	pendingBlockIsEmpty := true
 	pendingBlock := getBlock()
-	defer putBlock(pendingBlock)
+	pendingBlock.dedupInterval = bsw.dedupInterval
+	defer func() {
+		pendingBlock.dedupInterval = 0
+		putBlock(pendingBlock)
+	}()
 	tmpBlock := getBlock()
-	defer putBlock(tmpBlock)
+	tmpBlock.dedupInterval = bsw.dedupInterval
+
+	defer func() {
+		tmpBlock.dedupInterval = 0
+		putBlock(tmpBlock)
+	}()
 	for bsm.NextBlock() {
 		select {
 		case <-stopCh:

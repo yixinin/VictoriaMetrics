@@ -39,6 +39,8 @@ type blockStreamWriter struct {
 	// since such metrics have identical timestamps.
 	prevTimestampsData        []byte
 	prevTimestampsBlockOffset uint64
+
+	dedupInterval int64
 }
 
 // Init initializes bsw with the given writers.
@@ -64,6 +66,7 @@ func (bsw *blockStreamWriter) reset() {
 
 	bsw.prevTimestampsData = bsw.prevTimestampsData[:0]
 	bsw.prevTimestampsBlockOffset = 0
+	bsw.dedupInterval = 0
 }
 
 // MustInitFromInmemoryPart initializes bsw from inmemory part.

@@ -332,8 +332,9 @@ var (
 )
 
 type packedTimeseries struct {
-	metricName string
-	brs        []blockRef
+	metricName    string
+	brs           []blockRef
+	dedupInterval int64
 }
 
 type unpackWork struct {
@@ -438,6 +439,9 @@ func (pts *packedTimeseries) Unpack(dst *Result, tbf *tmpBlocksFile, tr storage.
 		return err
 	}
 	dedupInterval := storage.GetDedupInterval()
+	if pts.dedupInterval > 0 {
+		dedupInterval = pts.dedupInterval
+	}
 	mergeSortBlocks(dst, sbh, dedupInterval)
 	putSortBlocksHeap(sbh)
 	return nil

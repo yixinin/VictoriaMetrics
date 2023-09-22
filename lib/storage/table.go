@@ -231,9 +231,12 @@ func (tb *table) ForceMergePartitions(partitionNamePrefix string, duInterval int
 		if !strings.HasPrefix(ptw.pt.name, partitionNamePrefix) {
 			continue
 		}
+		ptw.pt.dedupInterval = duInterval
 		logger.Infof("starting forced merge for partition %q", ptw.pt.name)
 		startTime := time.Now()
-		if err := ptw.pt.ForceMergeAllParts(duInterval); err != nil {
+		err := ptw.pt.ForceMergeAllParts()
+		ptw.pt.dedupInterval = 0
+		if err != nil {
 			return fmt.Errorf("cannot complete forced merge for partition %q: %w", ptw.pt.name, err)
 		}
 		logger.Infof("forced merge for partition %q has been finished in %.3f seconds", ptw.pt.name, time.Since(startTime).Seconds())

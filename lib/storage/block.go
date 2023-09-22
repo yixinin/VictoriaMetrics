@@ -36,6 +36,8 @@ type Block struct {
 
 	// Marshaled representation of values.
 	valuesData []byte
+
+	dedupInterval int64
 }
 
 // Reset resets b.
@@ -161,6 +163,9 @@ func (b *Block) deduplicateSamplesDuringMerge() {
 		return
 	}
 	dedupInterval := GetDedupInterval()
+	if b.dedupInterval > 0 {
+		dedupInterval = b.dedupInterval
+	}
 	if dedupInterval <= 0 {
 		// Deduplication is disabled.
 		return
