@@ -224,15 +224,15 @@ func (tb *table) UpdateMetrics(m *TableMetrics) {
 // ForceMergePartitions force-merges partitions in tb with names starting from the given partitionNamePrefix.
 //
 // Partitions are merged sequentially in order to reduce load on the system.
-func (tb *table) ForceMergePartitions(partitionNamePrefix string, duInterval int64) error {
+func (tb *table) ForceMergePartitions(partitionNamePrefix string, dedupInterval int64) error {
 	ptws := tb.GetPartitions(nil)
 	defer tb.PutPartitions(ptws)
 	for _, ptw := range ptws {
 		if !strings.HasPrefix(ptw.pt.name, partitionNamePrefix) {
 			continue
 		}
-		ptw.pt.dedupInterval = duInterval
-		logger.Infof("starting forced merge for partition %q", ptw.pt.name)
+		ptw.pt.dedupInterval = dedupInterval
+		logger.Infof("starting forced merge for partition %q, dedup:%d", ptw.pt.name, dedupInterval)
 		startTime := time.Now()
 		err := ptw.pt.ForceMergeAllParts()
 		ptw.pt.dedupInterval = 0
@@ -418,10 +418,6 @@ func (tb *table) startFinalDedupWatcher() {
 func (tb *table) finalDedupWatcher() {
 	if !isDedupEnabled() {
 		// Deduplication is disabled.
-		var enable = isDedupEnabled()
-		if !enable {
-			logger.Infof("dedup disabled")
-		}
 		return
 	}
 	f := func() {
