@@ -418,6 +418,10 @@ func (tb *table) startFinalDedupWatcher() {
 func (tb *table) finalDedupWatcher() {
 	if !isDedupEnabled() {
 		// Deduplication is disabled.
+		var enable = isDedupEnabled()
+		if !enable {
+			logger.Infof("dedup disabled")
+		}
 		return
 	}
 	f := func() {

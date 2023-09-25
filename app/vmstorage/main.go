@@ -257,12 +257,12 @@ func RequestHandler(w http.ResponseWriter, r *http.Request) bool {
 		go func() {
 			activeForceMerges.Inc()
 			defer activeForceMerges.Dec()
-			logger.Infof("forced merge for partition_prefix=%q, dedup=%d miliseconds has been started", partitionNamePrefix, interval)
+			logger.Infof("forced merge for partition_prefix=%q, dedup=%d seconds has been started", partitionNamePrefix, interval/1000)
 			startTime := time.Now()
 			if err := Storage.ForceMergePartitions(partitionNamePrefix, interval); err != nil {
 				logger.Errorf("error in forced merge for partition_prefix=%q: %s", partitionNamePrefix, err)
 			}
-			logger.Infof("forced merge for partition_prefix=%q, dedup=%d miliseconds has been successfully finished in %.3f seconds", partitionNamePrefix, interval, time.Since(startTime).Seconds())
+			logger.Infof("forced merge for partition_prefix=%q, dedup=%d seconds has been successfully finished in %.3f seconds", partitionNamePrefix, interval/1000, time.Since(startTime).Seconds())
 		}()
 		return true
 	}

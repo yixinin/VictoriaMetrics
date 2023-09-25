@@ -149,8 +149,9 @@ func (b *Block) tooBig() bool {
 }
 
 func (b *Block) deduplicateSamplesDuringMerge() {
-	if !isDedupEnabled() {
+	if !isDedupEnabled(b.dedupInterval) {
 		// Deduplication is disabled
+		logger.Infof("block merge dedup disabled, interval:%d", b.dedupInterval)
 		return
 	}
 	// Unmarshal block if it isn't unmarshaled yet in order to apply the de-duplication to unmarshaled samples.

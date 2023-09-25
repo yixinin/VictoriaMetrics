@@ -1258,6 +1258,10 @@ func (pt *partition) mergeParts(pws []*partWrapper, stopCh <-chan struct{}, isFi
 	mergeIdx := pt.nextMergeIdx()
 	dstPartPath := pt.getDstPartPath(dstPartType, mergeIdx)
 
+	var enable = isDedupEnabled(pt.dedupInterval)
+	if !enable {
+		logger.Infof("dedup disabled, interval:%d", pt.dedupInterval)
+	}
 	if !isDedupEnabled(pt.dedupInterval) && isFinal && len(pws) == 1 && pws[0].mp != nil {
 		// Fast path: flush a single in-memory part to disk.
 		mp := pws[0].mp
